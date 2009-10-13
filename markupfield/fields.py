@@ -1,3 +1,4 @@
+import types
 from django.conf import settings
 from django.db import models
 from django.utils.safestring import mark_safe
@@ -126,22 +127,35 @@ class Markup(object):
     # allows display via templates to work without safe filter
     def __unicode__(self):
         return mark_safe(self.rendered)
+    
+    def render(self, val):
+        raise NotImplementedError
+        # Must be implemented by subclasses and return the value for rendered self.raw
 
 
 class MarkupDescriptor(object):
 
-    def __init__(self, field):
+    def __init__(self, field, markup_choices):
         self.field = field
         self.rendered_field_name = _rendered_field_name(self.field.name)
         self.markup_type_field_name = _markup_type_field_name(self.field.name)
+        self.markup_choices = markup_choices
 
     def __get__(self, instance, owner):
         if instance is None:
             raise AttributeError('Can only be accessed via an instance.')
         markup = instance.__dict__[self.field.name]
-        if markup is None:
+        markup_type = instance.__dict__[self.markup_type_field_name]
+        if markup_type is None:
             return None
-        return Markup(instance, self.field.name, self.rendered_field_name,
+        if type(self.markup_choices[markup_type]) == types.FunctionType:
+            # Just a plain filter function, use default Markup class
+            if markup is None:
+                return None
+            markup_class = Markup
+        else:
+            markup_class = self.markup_choices[markup_type]
+        return markup_class(instance, self.field.name, self.rendered_field_name,
                       self.markup_type_field_name)
 
     def __set__(self, obj, value):
@@ -156,19 +170,22 @@ class MarkupDescriptor(object):
 class MarkupField(models.TextField):
 
     def __init__(self, verbose_name=None, name=None, markup_type=None,
-                 default_markup_type=None, **kwargs):
-        if markup_type and default_markup_type:
-            raise ValueError('Cannot specify both markup_type and default_markup_type')
+                 markup_choices=None, default_markup_type=None, **kwargs):
+        if markup_type and (markup_choices or default_markup_type):
+            raise ValueError('Cannot specify both markup_type and markup_choices/default_markup_type')
+        if markup_choices and not default_markup_type:
+            raise ValueError('No default_markup_type specified.')
         self.default_markup_type = markup_type or default_markup_type
+        self.markup_choices = markup_choices or _MARKUP_TYPES
         if (self.default_markup_type and
-            self.default_markup_type not in _MARKUP_TYPES):
+            self.default_markup_type not in self.markup_choices):
             raise ValueError('Invalid markup type, allowed values: %s' %
-                             ', '.join(_MARKUP_TYPES.iterkeys()))
+                             ', '.join(self.markup_choices.iterkeys()))
         self.markup_type_editable = markup_type is None
         super(MarkupField, self).__init__(verbose_name, name, **kwargs)
 
     def contribute_to_class(self, cls, name):
-        keys = _MARKUP_TYPES.keys()
+        keys = self.markup_choices.keys()
         markup_type_field = models.CharField(max_length=30,
             choices=zip(keys, keys), default=self.default_markup_type,
             editable=self.markup_type_editable, blank=self.blank)
@@ -178,16 +195,20 @@ class MarkupField(models.TextField):
         cls.add_to_class(_markup_type_field_name(name), markup_type_field)
         cls.add_to_class(_rendered_field_name(name), rendered_field)
         super(MarkupField, self).contribute_to_class(cls, name)
-
-        setattr(cls, self.name, MarkupDescriptor(self))
+        
+        setattr(cls, self.name, MarkupDescriptor(self, self.markup_choices))
 
     def pre_save(self, model_instance, add):
         value = super(MarkupField, self).pre_save(model_instance, add)
-        if value.markup_type not in _MARKUP_TYPES:
+        if value.markup_type not in self.markup_choices:
             raise ValueError('Invalid markup type (%s), allowed values: %s' %
                              (value.markup_type,
-                              ', '.join(_MARKUP_TYPES.iterkeys())))
-        rendered = _MARKUP_TYPES[value.markup_type](value.raw)
+                              ', '.join(self.markup_choices.iterkeys())))
+        
+        if type(self.markup_choices[value.markup_type]) == types.FunctionType:
+            rendered = self.markup_choices[value.markup_type](value.raw)
+        else:
+            rendered = value.render()
         setattr(model_instance, _rendered_field_name(self.attname), rendered)
         return value.raw
 

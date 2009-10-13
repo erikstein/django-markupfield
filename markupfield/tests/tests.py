@@ -2,7 +2,7 @@ r"""
 >>> from django.core import serializers
 >>> from markupfield.fields import MarkupField, Markup
 >>> from markupfield.widgets import MarkupTextarea, AdminMarkupTextareaWidget
->>> from markupfield.tests.models import Post, Article
+>>> from markupfield.tests.models import Post, Article, CustomArticle
 
 # Create a few example posts
 >>> mp = Post(title='example markdown post', body='**markdown**', body_markup_type='markdown')
@@ -100,5 +100,20 @@ u'markdown'
 >>> ma = admin.ModelAdmin(Post, admin.site)
 >>> isinstance(ma.formfield_for_dbfield(Post._meta.get_field('body')).widget, AdminMarkupTextareaWidget)
 True
+
+
+## Custom Markup Classes ##
+
+>>> complex_rest = "Title of the article\n====================\n\nA paragraph with an *emphasized text*.\n\n"
+>>> a = CustomArticle(text=complex_rest)
+>>> a.save()
+>>> type(a.text)
+<class 'markupfield.tests.markup.RestructuredtextMarkup'>
+>>> a.text.rendered
+u'<div class="section" id="title-of-the-article">\n<h2>Title of the article</h2>\n<p>A paragraph with an <em>emphasized text</em>.</p>\n</div>\n'
+>>> a.text.plaintext()
+u'Title of the article\n\nA paragraph with an emphasized text.'
+>>> a.text.title()
+u'Title of the article'
 
 """

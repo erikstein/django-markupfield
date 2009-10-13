@@ -1,3 +1,9 @@
+0.3.1-beta1
+===========
+	- Added markup_choices parameter to MarkupField (allowing to configure it 
+	  per field)
+    - Allow to pass Markup subclasses instead of rendering functions
+
 0.3.0
 ==================
     - enable pygments support by default if it is installed

@@ -1,16 +1,12 @@
 
 try:
     import docutils
-    from docutils import core
-    import docutils.parsers.rst
 except ImportError:
     raise ImportError, 'Docutils not found'
 
 from django.conf import settings
-from django.utils.safestring import mark_safe
-from django.utils.html import strip_tags
-
 from markupfield.fields import Markup
+
 
 INITIAL_HEADER_LEVEL = getattr(settings, "RST_INITIAL_HEADER_LEVEL", 2)
 WRITER_NAME = getattr(settings, "RST_WRITER_NAME", 'html') # 'html4css1'
@@ -43,13 +39,13 @@ class RestructuredtextMarkup(Markup):
     
     def doctree(self, **kwargs):
         """
-        Returns the docutils doctree for a given source.
+        Returns the docutils doctree.
         """
         return docutils.core.publish_doctree(self.raw, settings_overrides=self.docutils_settings)
 
     def title(self, **kwargs):
         """
-        Why don't we use the 'title' part?
+        Returns the plain text of the first title node found in the doctree.
         """
         document = self.doctree()
         matches = document.traverse(condition=lambda node: isinstance(node, docutils.nodes.title))
@@ -59,5 +55,7 @@ class RestructuredtextMarkup(Markup):
             return None
     
     def plaintext(self, **kwargs):
+        """
+        Returns the document as plaintext, using docutils 'astext' method.
+        """
         return self.doctree().astext()
-        return strip_tags(self.get_rendered(self.raw, **kwargs))

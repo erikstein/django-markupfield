@@ -15,3 +15,13 @@ class Article(models.Model):
     markdown_field = MarkupField(markup_type='markdown')
 
 
+from markup import RestructuredtextMarkup
+import markdown
+
+CUSTOM_MARKUP_FIELD_TYPES = {
+    'markdown': markdown.markdown,
+    'ReST': RestructuredtextMarkup,
+}
+
+class CustomArticle(models.Model):
+    text = MarkupField(markup_choices=CUSTOM_MARKUP_FIELD_TYPES, default_markup_type='ReST')
